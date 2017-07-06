@@ -28,6 +28,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <unistd.h>
 #include <locale.h>
 
+#include <network.h>
+
 #include "exi.h"
 #include "dip.h"
 #include "global.h"
@@ -74,7 +76,7 @@ static GXRModeObj *vmode = NULL;
 
 static const unsigned char Boot2Patch[] =
 {
-    0x48, 0x03, 0x49, 0x04, 0x47, 0x78, 0x46, 0xC0, 0xE6, 0x00, 0x08, 0x70, 0xE1, 0x2F, 0xFF, 0x1E, 
+    0x48, 0x03, 0x49, 0x04, 0x47, 0x78, 0x46, 0xC0, 0xE6, 0x00, 0x08, 0x70, 0xE1, 0x2F, 0xFF, 0x1E,
     0x10, 0x10, 0x00, 0x00, 0x00, 0x00, 0x0D, 0x25,
 };
 /*static const unsigned char AHBAccessPattern[] =
@@ -87,11 +89,11 @@ static const unsigned char AHBAccessPatch[] =
 };*/
 static const unsigned char FSAccessPattern[] =
 {
-    0x9B, 0x05, 0x40, 0x03, 0x99, 0x05, 0x42, 0x8B, 
+    0x9B, 0x05, 0x40, 0x03, 0x99, 0x05, 0x42, 0x8B,
 };
 static const unsigned char FSAccessPatch[] =
 {
-    0x9B, 0x05, 0x40, 0x03, 0x1C, 0x0B, 0x42, 0x8B, 
+    0x9B, 0x05, 0x40, 0x03, 0x1C, 0x0B, 0x42, 0x8B,
 };
 
 // Forbid the use of MEM2 through malloc
@@ -129,7 +131,7 @@ static void updateMetaXml(void)
 {
 	char filepath[MAXPATHLEN];
 	bool dir_argument_exists = strlen(launch_dir);
-	
+
 	snprintf(filepath, sizeof(filepath), "%smeta.xml",
 		dir_argument_exists ? launch_dir : "/apps/Nintendont/");
 
@@ -473,7 +475,7 @@ static u32 CheckForMultiGameAndRegion(u32 CurDICMD, u32 *ISOShift, u32 *BI2regio
 			for (i = 0; i < gamecount; ++i)
 			{
 				const u32 color = gameIsUnaligned[i] ? MAROON : BLACK;
-				PrintFormat(DEFAULT_SIZE, color, MENU_POS_X, MENU_POS_Y + 20*4 + i * 20, "%50.50s [%.6s]%s", 
+				PrintFormat(DEFAULT_SIZE, color, MENU_POS_X, MENU_POS_Y + 20*4 + i * 20, "%50.50s [%.6s]%s",
 					    gi[i].Name, gi[i].ID, i == PosX ? ARROW_LEFT : " " );
 			}
 			GRRLIB_Render();
@@ -627,6 +629,14 @@ int main(int argc, char **argv)
 	gprintf("Nintendont at your service!\r\n%s\r\n", NIN_BUILD_STRING);
 	KernelLoaded = 1;
 
+	// Initialize the network (possibly should be switched by a config option?)
+	ShowMessageScreen("Initializing network...");
+	s32 net_init_rv = net_init();
+	if(net_init_rv) {
+		ShowMessageScreen("Failed to initialize network!");
+		usleep(1000000);
+	}
+
 	// Checking for storage devices...
 	if(argsboot == false)
 		ShowMessageScreen("Checking storage devices...");
@@ -705,7 +715,7 @@ int main(int argc, char **argv)
 				GRRLIB_Render();
 				ClearScreen();
 			}
-			
+
 			FPAD_Update();
 
 			if (FPAD_Cancel(0)) {
@@ -1288,7 +1298,7 @@ int main(int argc, char **argv)
 		__SYS_UnlockSram(1); // 1 -> write changes
 		while(!__SYS_SyncSram());
 	}
-	
+
 	ReconfigVideo(vmode);
 	VIDEO_SetBlack(FALSE);
 	VIDEO_Flush();
