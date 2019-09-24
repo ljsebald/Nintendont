@@ -58,6 +58,9 @@
 
 #include "asm/codehandler_stub.h"
 
+#include "asm/PSOEXILock.h"
+#include "asm/PSOEXIUnlock.h"
+
 //this is the data from my wii disk drive
 const u8 DiskDriveInfo[32] = {
 	0x00,0x00,0x00,0x02,

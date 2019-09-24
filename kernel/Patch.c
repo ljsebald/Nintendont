@@ -141,7 +141,7 @@ static const unsigned char DSPHashes[][20] =
 	{0x09, 0xF1, 0x6B, 0x48, 0x57, 0x15, 0xEB, 0x3F, 0x67, 0x3E, 0x19, 0xEF, 0x7A, 0xCF, 0xE3, 0x60, 0x7D, 0x2E, 0x4F, 0x02},
 
 	// 12: Dolphin = 0x267fd05a = Pikmin 1 (PAL)
-	{0x80, 0x01, 0x60, 0xDF, 0x89, 0x01, 0x9E, 0xE3, 0xE8, 0xF7, 0x47, 0x2C, 0xE0, 0x1F, 0xF6, 0x80, 0xE9, 0x85, 0xB0, 0x24},	
+	{0x80, 0x01, 0x60, 0xDF, 0x89, 0x01, 0x9E, 0xE3, 0xE8, 0xF7, 0x47, 0x2C, 0xE0, 0x1F, 0xF6, 0x80, 0xE9, 0x85, 0xB0, 0x24},
 
 	// 13: Dolphin = 0x6ba3b3ea = IPL NTSC 1.2 [NOTE: Listed as PAL IPL in Dolphin.]
 	{0xB4, 0xCB, 0xC0, 0x0F, 0x51, 0x2C, 0xFE, 0xE5, 0xA4, 0xBA, 0x2A, 0x59, 0x60, 0x8A, 0xEB, 0x8C, 0x86, 0xC4, 0x61, 0x45},
@@ -351,7 +351,7 @@ static void DoDSPPatch( char *ptr, u32 Version )
 			PatchAX_Dsp( (u32)ptr, 0x6E0, 0x795, 0x83F, 0x8F );
 		} break;
 		case 5:		// Mario Kart Double Dash
-		{		
+		{
 			// 5F8 - part of halt routine
 			PatchZelda_Dsp( (u32)ptr, 0x05F8, 0x05B1, true, false );
 			PatchZeldaInPlace_Dsp( (u32)ptr, 0x0566 );
@@ -369,7 +369,7 @@ static void DoDSPPatch( char *ptr, u32 Version )
 			// 6E5 - part of halt routine
 			PatchZelda_Dsp( (u32)ptr, 0x06E5, 0x069E, true, false );
 			PatchZeldaInPlace_Dsp( (u32)ptr, 0x0653 );
-		} break; 
+		} break;
 		case 9:		// Paper Mario The Thousand Year Door
 		{
 			PatchAX_Dsp( (u32)ptr, 0x69E, 0x753, 0x7FD, 0x8F );
@@ -692,7 +692,7 @@ void PatchFuncInterface( char *dst, u32 Length )
 				LISReg = 32;
 			continue;
 		}
-	
+
 		if (((op & 0xF8000000) == 0x80000000)   // lwz and lwzu
 		    || ( (op & 0xF8000000 ) == 0x90000000 ) ) // stw and stwu
 		{
@@ -1731,9 +1731,9 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 						// EXI Device 0 Control Register
 						write32A( (u32)Buffer+i+0x114, 0x3C60C000, 0x3C60CC00, 1 );
 						write32A( (u32)Buffer+i+0x118, 0x80830010, 0x80836800, 1 );
-						if(TRIGame)
+						if(TRIGame || isPSO)
 						{
-							// EXI Device 2 Control Register (Trifroce)
+							// EXI Device 2 Control Register (Triforce, PSO, anything else that uses the modem/bba)
 							write32A( (u32)Buffer+i+0x188, 0x3C60C000, 0x3C60CC00, 1 );
 							write32A( (u32)Buffer+i+0x18C, 0x38630018, 0x38636800, 1 );
 							write32A( (u32)Buffer+i+0x190, 0x80830000, 0x80830028, 1 );
@@ -1790,7 +1790,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 					i = GotoFuncEnd(i, (u32)Buffer);
 					continue;
 				}
-				else if( BufLowAt0 == 0x6000 && 
+				else if( BufLowAt0 == 0x6000 &&
 					(read32( (u32)Buffer + i + 8 ) & 0xFFFF) == 0x002A &&
 					(read32( (u32)Buffer + i + 0xC ) & 0xFFFF) == 0x0054 )
 				{
@@ -1820,7 +1820,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 					i = GotoFuncEnd(i, (u32)Buffer);
 					continue;
 				}
-				else if( BufLowAt0 == 0x6000 && 
+				else if( BufLowAt0 == 0x6000 &&
 					(read32( (u32)Buffer + i + 0x1C ) & 0xFFFF) == 0x002A &&
 					(read32( (u32)Buffer + i + 0x20 ) & 0xFFFF) == 0x0054 )
 				{
@@ -1865,7 +1865,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 			}
 			if( (PatchCount & FPATCH_getTiming) == 0 )
 			{
-				if( BufAt0 == 0x386500BE && BufAt4 == 0x4E800020 && 
+				if( BufAt0 == 0x386500BE && BufAt4 == 0x4E800020 &&
 					read32((u32)Buffer+i+8) == 0x386500E4 && read32((u32)Buffer+i+0xC) == 0x4E800020 )
 				{
 					u32 PatchOffset = 0x10;
@@ -1935,8 +1935,8 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 					i = GotoFuncEnd(i, (u32)Buffer);
 					continue;
 				}
-				else if(BufAt0 == 0x38000008 && BufAt4 == 0x54A47820 && 
-					read32((u32)Buffer+i+20) == 0x901F0044 && read32((u32)Buffer+i+28) == 0x7C801A78 && 
+				else if(BufAt0 == 0x38000008 && BufAt4 == 0x54A47820 &&
+					read32((u32)Buffer+i+20) == 0x901F0044 && read32((u32)Buffer+i+28) == 0x7C801A78 &&
 					read32((u32)Buffer+i+40) == 0x3B400000 && read32((u32)Buffer+i+60) == 0x38800008)
 				{
 					printpatchfound("__CARDUnlock", "IPL A", (u32)Buffer + GotoFuncStart(i, (u32)Buffer));
@@ -1959,7 +1959,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 					i = GotoFuncEnd(i, (u32)Buffer);
 					continue;
 				}
-				else if(BufAt0 == 0x38000008 && BufAt4 == 0x90180004 && 
+				else if(BufAt0 == 0x38000008 && BufAt4 == 0x90180004 &&
 					read32((u32)Buffer+i+16) == 0x38000000 && read32((u32)Buffer+i+20) == 0x90180008)
 				{
 					printpatchfound("__CARDUnlock", "DBG", (u32)Buffer + GotoFuncStart(i, (u32)Buffer));
@@ -2194,7 +2194,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 						// 0x6800 * 3 / 2 = 0x9C00  is too big to fit in li %r0, imm
 						// Use branch to function
 						printpatchfound("Timer", "Datel", (u32)Buffer+i-4);
-						PatchB(DatelTimerAddr, (u32)Buffer+i-4);  
+						PatchB(DatelTimerAddr, (u32)Buffer+i-4);
 						i += 8;
 						continue;
 					}
@@ -2228,7 +2228,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 
 						if (DspMatches[l].Length-UseLast > 0)
 							memcpy( (void*)0x12E80000+UseLast, (unsigned char*)Buffer+i+UseLast, DspMatches[l].Length-UseLast );
-						
+
 						if (DspMatches[l].Length != UseLast)
 						{
 							sha1( SHA1i, NULL, 0, 0, NULL );
@@ -2271,7 +2271,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 		if(curFunc.Length < minPatternSize || curFunc.Length > maxPatternSize)
 			continue;
 		//if ((((u32)Buffer + i) & 0x7FFFFFFF) == 0x00000000) //(FuncPrint)
-		//	dbgprintf("FuncPattern: 0x%X, %d, %d, %d, %d, %d\r\n", 
+		//	dbgprintf("FuncPattern: 0x%X, %d, %d, %d, %d, %d\r\n",
 		//	curFunc.Length, curFunc.Loads, curFunc.Stores, curFunc.FCalls, curFunc.Branch, curFunc.Moves);
 		for(patitr = 0; patitr < CurFPatternsListLen; ++patitr)
 		{
@@ -2474,7 +2474,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 									L3 = read32(FOffset+0x50) & 0xFFFF;
 									RegLoc = read32(FOffset+0x94) & 0xFFFF;
 								}
-								else if(CurPatterns[j].Length == 0x84 && 
+								else if(CurPatterns[j].Length == 0x84 &&
 									(read32(FOffset+0x80) & 0xFE000000) == 0x98000000)
 								{	//Pattern B
 									BaseReg = read32(FOffset) & 0x1FFFFF;
@@ -2574,8 +2574,11 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 							{
 								if(read32(FOffset+k) == 0x54000734)
 								{
-									printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset + k);
-									memcpy((void*)FOffset, EXILock, sizeof(EXILock));
+									printpatchfound("PSOEXIUnlock", CurPatterns[j].Type, FOffset + k);
+									if(!isPSO)
+										memcpy((void*)FOffset, EXILock, sizeof(EXILock));
+									else
+										memcpy((void*)FOffset, PSOEXIUnlock, sizeof(PSOEXIUnlock));
 									found = 1;
 									break;
 								}
@@ -2604,7 +2607,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 						} break;
 						case FCODE_ReadROM:
 						{
-							if(read32(FOffset+0x3C) == 0x3BE00100 || 
+							if(read32(FOffset+0x3C) == 0x3BE00100 ||
 								read32(FOffset+0x44) == 0x38800100)
 							{
 								memcpy((void*)FOffset, ReadROM, ReadROM_size);
@@ -3059,6 +3062,13 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 									(TITLE_ID) != 0x475041 )	// Pok駑on Channel
 									break;
 							}
+							if( CurPatterns[j].Group == FGROUP_EXILock && isPSO )
+							{
+								// Actually do some locking on PSO, since it seems to be needed.
+								printpatchfound("PSOEXILock", CurPatterns[j].Type, FOffset);
+								memcpy( (void*)(FOffset), PSOEXILock, sizeof(PSOEXILock) );
+								break;
+							}
 							if( (CurPatterns[j].Length >> 16) == (FCODES  >> 16) )
 							{
 								dbgprintf("Patch:Unhandled dead case:%08X\r\n", CurPatterns[j].Length );
@@ -3264,7 +3274,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 		sync_after_write((void*)0x7D49C, sizeof(OSReportDM));
 		memcpy((void*)0x7D5A8, OSReportDM, sizeof(OSReportDM));
 		sync_after_write((void*)0x7D5A8, sizeof(OSReportDM));
-		
+
 	}*/
 	/*if(GAME_ID == 0x47365145) //Megaman Collection
 	{
@@ -3461,7 +3471,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 	{
 		if(read32(0x6A28) == 0x7C7F282E && read32(0x6AF8) == 0x7C1F002E)
 		{
-			//Dont load compressed game .rel files but the uncompressed 
+			//Dont load compressed game .rel files but the uncompressed
 			//ones to patch the timers without any further hooks
 			write32(0x6A28, 0x38600000);
 			write32(0x6AF8, 0x38000000);
@@ -3534,8 +3544,8 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 	sync_after_write( Buffer, Length );
 
 	UseReadLimit = 1;
-	// Datel discs require read speed. (Related to Stop motor/Read Header?) 
-	if((RealDiscCMD != 0 && !Datel) || TRIGame != TRI_NONE || IsN64Emu 
+	// Datel discs require read speed. (Related to Stop motor/Read Header?)
+	if((RealDiscCMD != 0 && !Datel) || TRIGame != TRI_NONE || IsN64Emu
 			|| ConfigGetConfig(NIN_CFG_REMLIMIT))
 		UseReadLimit = 0;
 }

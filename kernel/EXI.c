@@ -28,6 +28,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "Config.h"
 #include "debug.h"
 #include "SRAM.h"
+#include "Modem.h"
 
 #include "ff_utf8.h"
 
@@ -60,6 +61,8 @@ static char MemCardName[0x20];
 static u32 TRIBackupOffset= 0;
 static u32 EXI2IRQ			= 0;
 static u32 EXI2IRQStatus	= 0;
+
+static bool Modem_IRQ = false;
 
 static u8 *ambbBackupMem;
 
@@ -198,6 +201,7 @@ void EXIInterrupt(void)
 	IRQ_Cause = 0;
 	IRQ_Cause2 = 0;
 }
+
 bool EXICheckCard(void)
 {
 	if(changed == true)
@@ -214,7 +218,7 @@ void EXISaveCard(void)
 		return;
 
 	u32 wrote;
-	
+
 	if (BlockOffLow < BlockOffHigh)
 	{
 //#ifdef DEBUG_EXI
@@ -286,7 +290,7 @@ u32 EXIDeviceMemoryCard( u8 *Data, u32 Length, u32 Mode )
 						dbgprintf("EXI: CARDGetDeviceIDNintendo()\r\n");
 #endif
 					} break;
-#ifdef DEBUG_EXI					
+#ifdef DEBUG_EXI
 					case 0x89:
 					{
 						dbgprintf("EXI: CARDClearStatus()\r\n");
@@ -390,7 +394,7 @@ u32 EXIDeviceMemoryCard( u8 *Data, u32 Length, u32 Mode )
 					//	Shutdown();
 					} break;
 #endif
-				}			
+				}
 			} break;
 			default:
 			{
@@ -407,7 +411,7 @@ u32 EXIDeviceMemoryCard( u8 *Data, u32 Length, u32 Mode )
 
 						memcpy( MCard+BlockOff, Data, Length );
 
-						sync_after_write( MCard+BlockOff, Length );	
+						sync_after_write( MCard+BlockOff, Length );
 
 						IRQ_Cause = 10;	// TC(8) & EXI(2) IRQ
 						EXIOK = 2;
@@ -592,6 +596,7 @@ u32 EXIDeviceSP1( u8 *Data, u32 Length, u32 Mode )
 
 	if( Mode == 1 )		// Write
 	{
+
 		switch( Length )
 		{
 			/*
@@ -676,6 +681,7 @@ u32 EXIDeviceSP1( u8 *Data, u32 Length, u32 Mode )
 		}
 
 	} else {
+
 		switch(EXICommand)
 		{
 			/* 0x02 */
@@ -748,16 +754,187 @@ u32 EXIDeviceSP1( u8 *Data, u32 Length, u32 Mode )
 	return 0;
 }
 
+void EXIModemInterrupt(void) {
+    Modem_IRQ = true;
+}
+
+void EXIModemInterruptPktIn(void) {
+    dbgprintf("EXI: Modem Pkt IRQ\r\n");
+    IRQ_Cause2 = 2;
+    EXI_IRQ = true;
+    Modem_IRQ = false;
+    IRQ_Timer = read32(HW_TIMER);
+}
+
+u32 EXIDeviceModem(u8 *Data, u32 Length, u32 Mode, int dma) {
+    static u8 regnum = 0;
+    static u16 blocklen = 0;
+    u32 tmp;
+    int transfer_irq = 0;
+
+    dbgprintf("Modem access: %p %u %u (%d %d %d %d)\n", Data, Length, Mode, EXICommand, regnum, blocklen, dma);
+
+    if(Mode == 1) { /* Write */
+        tmp = (u32)Data;
+
+        if(EXICommand == MODEM_WRITE_BLOCK) {
+            if(regnum == MODEM_HAYES_CMD) {
+                /* Hayes command register -- always sent by Immediate mode. */
+                modem_write_cmd(tmp, blocklen > 4 ? 4 : blocklen);
+
+                if(blocklen >= 4) {
+                    blocklen -= 4;
+                }
+                else {
+                    blocklen = 0;
+                    EXICommand = 0;
+                }
+            }
+            else if(regnum == MODEM_SERIAL_IO) {
+                if(modem_write_serial(tmp, Length, blocklen)) {
+                    blocklen = 0;
+                    EXICommand = 0;
+
+                    if(dma)
+                        transfer_irq = 1;
+                }
+            }
+        }
+        else {
+            switch(Length) {
+                case 1:
+                    if(EXICommand != MODEM_WRITE_REG) {
+                        dbgprintf("Modem: Write length 1, but not to register (%d)?\n", EXICommand);
+                        break;
+                    }
+
+                    modem_write_reg(regnum, tmp >> 24);
+                    break;
+
+                case 2:
+                    if((tmp >> 16) == 0) {
+                        dbgprintf("Modem: Set command to read ID\n");
+                        EXICommand = MEM_READ_ID;
+                    }
+                    else if(((tmp >> 24) & 0xE0) == 0x80) {
+                        dbgprintf("Modem: Reset?\n");
+                        EXICommand = 0;
+                        regnum = 0;
+                        blocklen = 0;
+                        modem_init();
+                    }
+                    else if(((tmp >> 24) & 0xE0) == 0x40) {
+                        EXICommand = MODEM_WRITE_REG;
+                        regnum = ((tmp >> 24) & 0x1F);
+                        dbgprintf("Modem: Set command to write register %d\n", (int)regnum);
+                    }
+                    else if(((tmp >> 24) & 0xE0) == 0x00) {
+                        EXICommand = MODEM_READ_REG;
+                        regnum = ((tmp >> 24) & 0x1F);
+                        dbgprintf("Modem: Set command to read register %d\n", (int)regnum);
+                    }
+                    else {
+                        dbgprintf("Ignoring unknown write\n");
+                        EXICommand = 0;
+                    }
+                    break;
+
+                case 4:
+                    if(((tmp >> 24) & 0xE0) == 0x60) {
+                        EXICommand = MODEM_WRITE_BLOCK;
+                        regnum = ((tmp >> 24) & 0x1F);
+                        blocklen = ((tmp >> 8) & 0xFFFF);
+                        dbgprintf("Modem: Set command to write %d bytes to block %d\n", (int)blocklen, (int)regnum);
+
+                        if(regnum == MODEM_SERIAL_IO)
+                            modem_reset_serial();
+                    }
+                    else if(((tmp >> 24) & 0xE0) == 0x20) {
+                        EXICommand = MODEM_READ_BLOCK;
+                        regnum = ((tmp >> 24) & 0x1F);
+                        blocklen = ((tmp >> 8) & 0xFFFF);
+                        dbgprintf("Modem: Set command to read %d bytes from block %d\n", (int)blocklen, (int)regnum);
+                    }
+                    break;
+            }
+        }
+	} else {
+        //dbgprintf("Command: %u\n", EXICommand);
+
+        switch(EXICommand)
+        {
+            case MEM_READ_ID:
+                write32(EXI_CMD_1, EXI_DEVTYPE_MODEM);
+                break;
+
+            case MODEM_READ_REG:
+                write32(EXI_CMD_1, modem_read_reg(regnum));
+                break;
+
+            case MODEM_READ_BLOCK:
+                switch(regnum) {
+                    case MODEM_HAYES_CMD:
+                        modem_read_resp(EXI_CMD_1, Length);
+                        break;
+
+                    case MODEM_SERIAL_IO:
+                        if(modem_read_serial(EXI_CMD_1, Length)) {
+                            blocklen = 0;
+                            EXICommand = 0;
+
+                            if(dma)
+                                transfer_irq = 1;
+                        }
+                        break;
+
+                    default:
+                        dbgprintf("Ignoring unknown block read.\n");
+                }
+                break;
+
+            default:
+                dbgprintf("Ignoring unknown read\n");
+        }
+    }
+
+    write32(EXI_CMD_0, 0);
+    sync_after_write((void*)EXI_BASE, 0x20);
+
+    if(Modem_IRQ) {
+        dbgprintf("EXI: Modem IRQ\r\n");
+        IRQ_Cause2 = 2;
+
+        if(transfer_irq)
+            IRQ_Cause2 |= 8;
+
+        EXI_IRQ = true;
+        Modem_IRQ = false;
+        IRQ_Timer = read32(HW_TIMER);
+    }
+    else if(transfer_irq) {
+        dbgprintf("EXI: Modem Transfer IRQ\r\n");
+        IRQ_Cause2 = 8;
+        EXI_IRQ = true;
+        IRQ_Timer = read32(HW_TIMER);
+    }
+    return 0;
+}
+
 void EXIUpdateRegistersNEW( void )
 {
 	if( EXI_IRQ == true ) //still working
 		return;
+
+    modem_poll();
 
 	//u32 chn, dev, frq, ret, data, len, mode;
 	u32 chn, dev, ret, data, len, mode;
 	u8 *ptr;
 	sync_before_read((void*)EXI_BASE, 0x20);
 	u32 command = read32(EXI_CMD_0);
+
+    //chn = read32(EXI_LOCKS);
+    //dbgprintf("EXI: %08x\n", chn);
 
 	if( command & 0xFF000000 )
 	{
@@ -768,7 +945,7 @@ void EXIUpdateRegistersNEW( void )
 				chn = command & 0xFF;
 				dev = (command>>8) & 0xFF;
 				//frq = (command>>16) & 0xFF;
-				
+
 				//dbgprintf("EXISelect( %u, %u, %u )\r\n", chn, dev, frq );
 				ret = 1;
 
@@ -820,7 +997,7 @@ void EXIUpdateRegistersNEW( void )
 				{
 					data = P2C(data);
 				}
-				
+
 				//dbgprintf("EXIImm( %u, %p, %u, %u, Dev:%u EC:%u )\r\n", chn, data, len, mode, Device, EXICommand );
 				switch( Device )
 				{
@@ -834,7 +1011,8 @@ void EXIUpdateRegistersNEW( void )
 					} break;
 					case EXI_DEV_SP1:
 					{
-						EXIDeviceSP1( (u8*)data, len, mode );
+						//EXIDeviceSP1( (u8*)data, len, mode );
+                        EXIDeviceModem((u8*)data, len, mode, 0);
 					} break;
 					default:
 					{
@@ -851,24 +1029,27 @@ void EXIUpdateRegistersNEW( void )
 				ptr=	(u8*)P2C(read32(EXI_CMD_1));
 				len	=	command& 0xFFFF;
 				mode=	(command >> 16) & 0xF;
-				
+
 				//dbgprintf("EXIDMA( %u, %p, %u, %u )\r\n", chn, ptr, len, mode );
 				switch( Device )
 				{
 					case EXI_DEV_MEMCARD_A:
 					{
 						EXIDeviceMemoryCard( ptr, len, mode );
+                        EXICommand = 0;
 					} break;
 					case EXI_DEV_MASK_ROM_RTC_SRAM_UART:
 					{
 						EXIDevice_ROM_RTC_SRAM_UART( ptr, len, mode );
+                        EXICommand = 0;
 					} break;
 					case EXI_DEV_SP1:
 					{
 #ifdef DEBUG_SRAM
 						hexdump( ptr, len );
 #endif
-						EXIDeviceSP1( ptr, len, mode );
+						//EXIDeviceSP1( ptr, len, mode );
+                        EXIDeviceModem(ptr, len, mode, 1);
 					} break;
 					default:
 					{
@@ -878,7 +1059,7 @@ void EXIUpdateRegistersNEW( void )
 					} break;
 				}
 
-				EXICommand = 0;
+				//EXICommand = 0;
 
 			} break;
 			default:
@@ -898,13 +1079,13 @@ void EXIReadFontFile(u8* Data, u32 Length)
 //SegaBoot 3.11 with Free Play enabled
 static const unsigned int sb311block[54] =
 {
-    0x41434255, 0x30303031, 0x007D0512, 0x01000000, 0x00000311, 0x53424C4B, 
-    0x00000000, 0x63090400, 0x01010A01, 0x01010001, 0x01010101, 0x01010101, 
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000001, 
-    0x00000000, 0x00000000, 0x00000000, 0x00000001, 0x00000000, 0x00000000, 
-    0x00000000, 0x00000001, 0x00000000, 0x00000000, 0x00000000, 0x00000001, 
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 
-    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 
+    0x41434255, 0x30303031, 0x007D0512, 0x01000000, 0x00000311, 0x53424C4B,
+    0x00000000, 0x63090400, 0x01010A01, 0x01010001, 0x01010101, 0x01010101,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000001,
+    0x00000000, 0x00000000, 0x00000000, 0x00000001, 0x00000000, 0x00000000,
+    0x00000000, 0x00000001, 0x00000000, 0x00000000, 0x00000000, 0x00000001,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x200E1AFF,
     0xFFFF0000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
 };

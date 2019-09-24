@@ -25,7 +25,7 @@ enum
 	CB_SIZE		= (BBA_MEM_SIZE - CB_OFFSET),
 	SIZEOF_ETH_HEADER		= 0xe,
 	SIZEOF_RECV_DESCRIPTOR	= 4,
-	
+
 	EXI_DEVTYPE_MODEM	    = 0x02020000,
 	EXI_DEVTYPE_ETHER	    = 0x04020200,
 	EXI_DEVTYPE_AD16	    = 0x04120000,
@@ -40,12 +40,12 @@ enum EXICommands {
 	MEM_BLOCK_WRITE,
 	MEM_BLOCK_ERASE,
 	MEM_FORMAT,
-  
+
   AMBB_BACKUP_OFFSET,
   AMBB_BACKUP_READ,
   AMBB_BACKUP_WRITE,
-  
-  AMBB_UNKNOWN,				// 
+
+  AMBB_UNKNOWN,				//
 	AMBB_ISR_READ,			// 0x82
   AMBB_IMR_READ,			// 0x86
 	AMBB_IMR_WRITE,			// 0x87
@@ -58,6 +58,11 @@ enum EXICommands {
 	SRAM_WRITE,
 
 	IPL_READ_FONT,
+
+    MODEM_READ_REG,
+    MODEM_WRITE_REG,
+    MODEM_READ_BLOCK,
+    MODEM_WRITE_BLOCK,
 };
 
 #define IPL_ROM_FONT_SJIS				0x1AFF00
@@ -77,10 +82,11 @@ enum EXICommands {
 
 #define		EXI_CMD_0	(EXI_BASE+0x00)
 #define		EXI_CMD_1	(EXI_BASE+0x04)
+#define		EXI_LOCKS	(EXI_BASE+0x08)
 
 #define EXI_READ			0
 #define EXI_WRITE			1
-#define EXI_READWRITE	2 
+#define EXI_READWRITE	2
 
 void EXIInit();
 
@@ -99,6 +105,9 @@ void EXISaveCard(void);
 bool EXICheckCard(void);
 void EXIReadFontFile(u8* Data, u32 Length);
 void EXIPrepareTRIGameStart();
+
+void EXIModemInterrupt(void);
+void EXIModemInterruptPktIn(void);
 
 #endif
 
